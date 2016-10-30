@@ -387,7 +387,7 @@ ull initialPermutation(ull x)
 	if (x & (i << 26)) y |= (i << 44); //Bit 38 -> 20
 	if (x & (i << 25)) y |= (i << 4); //Bit 39 -> 60
 	if (x & (i << 24)) y |= (i << 36); //Bit 40 -> 28
-	if (x & (i << 23)) y |= (i << 30); //Bit 41 -> 34
+	if (x & (i << 23)) y |= (i << 29); //Bit 41 -> 35
 	if (x & (i << 22)) y |= (i << 61); //Bit 42 -> 3
 	if (x & (i << 21)) y |= (i << 21); //Bit 43 -> 43
 	if (x & (i << 20)) y |= (i << 53); //Bit 44 -> 11
@@ -420,6 +420,12 @@ ull finalPermutation(ull x)
 {
 	ull y = 0;
 	ull i = 1;
+
+	ull r = x, l = x;
+	l = l >> 32;
+	r = r << 32;
+	x = r + l;
+
 
 
 
@@ -463,7 +469,7 @@ ull finalPermutation(ull x)
 	if (x & (i << 44)) y |= (i << 26); //Bit 20 -> 38
 	if (x & (i << 4)) y |= (i << 25); //Bit 60 -> 39
 	if (x & (i << 36)) y |= (i << 24); //Bit 28 -> 40
-	if (x & (i << 30)) y |= (i << 23); //Bit 34 -> 41
+	if (x & (i << 29)) y |= (i << 23); //Bit 35 -> 41
 	if (x & (i << 61)) y |= (i << 22); //Bit 3 -> 42
 	if (x & (i << 21)) y |= (i << 21); //Bit 43 -> 43
 	if (x & (i << 53)) y |= (i << 20); //Bit 11 -> 44
@@ -1254,13 +1260,11 @@ ull feistelRound(ull block, ull key)
 	return block;
 }
 
-
 //returns random char for padding
-char getPadding()
+ull getPadding()
 {
 		int ascii = rand() % 256;
-		char thispad = char(ascii);
-		return thispad;
+		return ascii;
 }
 
 
@@ -1271,7 +1275,7 @@ int main(int argcount, char *argvalues[])
 	FILE * inFilePnt, * outFilePnt;
 	long lSize;
 	size_t result;
-	ull currentBlock, key;
+	ull currentBlock, key, sizeBlock;
 	ull keys[16];
 
 	getKeys(argvalues[2], keys);
@@ -1285,6 +1289,41 @@ int main(int argcount, char *argvalues[])
 	fseek(inFilePnt, 0, SEEK_END);
 	lSize = ftell(inFilePnt);
 	rewind(inFilePnt);
+	
+	sizeBlock = 0;
+	if (argvalues[1][1] == 'E') 
+	{
+		for (int i = 4; i < 8; i++)
+		{
+			sizeBlock = sizeBlock + (getPadding() << (i * 8));
+		}
+		sizeBlock = sizeBlock + lSize;
+		fwrite(&sizeBlock, 1, 8, outFilePnt);
+	}
+	if (argvalues[1][1] == 'D')
+	{
+		result = fread(&sizeBlock, 1, 8, inFilePnt);
+		sizeBlock = initialPermutation(sizeBlock);
+		sizeBlock = feistelRound(sizeBlock, keys[15]);
+		sizeBlock = feistelRound(sizeBlock, keys[14]);
+		sizeBlock = feistelRound(sizeBlock, keys[13]);
+		sizeBlock = feistelRound(sizeBlock, keys[12]);
+		sizeBlock = feistelRound(sizeBlock, keys[11]);
+		sizeBlock = feistelRound(sizeBlock, keys[10]);
+		sizeBlock = feistelRound(sizeBlock, keys[9]);
+		sizeBlock = feistelRound(sizeBlock, keys[8]);
+		sizeBlock = feistelRound(sizeBlock, keys[7]);
+		sizeBlock = feistelRound(sizeBlock, keys[6]);
+		sizeBlock = feistelRound(sizeBlock, keys[5]);
+		sizeBlock = feistelRound(sizeBlock, keys[4]);
+		sizeBlock = feistelRound(sizeBlock, keys[3]);
+		sizeBlock = feistelRound(sizeBlock, keys[2]);
+		sizeBlock = feistelRound(sizeBlock, keys[1]);
+		sizeBlock = feistelRound(sizeBlock, keys[0]);
+		sizeBlock = finalPermutation(sizeBlock);
+		sizeBlock = sizeBlock & 255;
+	}
+
 
 	int i = 0;
 	while (i < lSize)
@@ -1292,25 +1331,52 @@ int main(int argcount, char *argvalues[])
 		int numLeft = lSize - i;
 		if (numLeft > 0 && numLeft < 8) 
 		{	
-			char * buffer = (char*)malloc(8);
-			int padNum = 8 - numLeft;
-			result = fread(buffer, 1, numLeft, inFilePnt);
-			//char * paddedBuffer = new char[8];
-			//strcpy_s(paddedBuffer, buffer);
+			if (argvalues[1][1] == 'E')
+			{
+				char * buffer = (char*)malloc(8);
+				int padNum = 8 - numLeft;
+				currentBlock = 0;
+				result = fread(&currentBlock, 1, numLeft, inFilePnt);
+				currentBlock = currentBlock << (padNum * 8);
 
-			while (padNum > 0)
-			{	
-				buffer[8 - padNum] = getPadding();				
-				padNum--;
+				while (padNum > 0)
+				{
+					ull pad = getPadding();
+					pad = pad << ((padNum - 1) * 8);
+					currentBlock = currentBlock + pad;
+					padNum--;
+				}
+
+				currentBlock = initialPermutation(currentBlock);
+
+				currentBlock = feistelRound(currentBlock, keys[0]);
+				currentBlock = feistelRound(currentBlock, keys[1]);
+				currentBlock = feistelRound(currentBlock, keys[2]);
+				currentBlock = feistelRound(currentBlock, keys[3]);
+				currentBlock = feistelRound(currentBlock, keys[4]);
+				currentBlock = feistelRound(currentBlock, keys[5]);
+				currentBlock = feistelRound(currentBlock, keys[6]);
+				currentBlock = feistelRound(currentBlock, keys[7]);
+				currentBlock = feistelRound(currentBlock, keys[8]);
+				currentBlock = feistelRound(currentBlock, keys[9]);
+				currentBlock = feistelRound(currentBlock, keys[10]);
+				currentBlock = feistelRound(currentBlock, keys[11]);
+				currentBlock = feistelRound(currentBlock, keys[12]);
+				currentBlock = feistelRound(currentBlock, keys[13]);
+				currentBlock = feistelRound(currentBlock, keys[14]);
+				currentBlock = feistelRound(currentBlock, keys[15]);
 			}
-			i += 8;
-		
+
+			currentBlock = finalPermutation(currentBlock);
+			fwrite(&currentBlock, 1, 8, outFilePnt);
+			i += 8;		
 
 			//call function to add random characters to &currentBlock
 		}
 		else
 		{
 			result = fread(&currentBlock, 1, 8, inFilePnt);
+			//currentBlock = 0x0123456789ABCDEF;
 			currentBlock = initialPermutation(currentBlock);
 			if (argvalues[1][1] == 'E')
 			{
@@ -1330,6 +1396,7 @@ int main(int argcount, char *argvalues[])
 				currentBlock = feistelRound(currentBlock, keys[13]);
 				currentBlock = feistelRound(currentBlock, keys[14]);
 				currentBlock = feistelRound(currentBlock, keys[15]);
+				currentBlock = finalPermutation(currentBlock);
 			}
 			if (argvalues[1][1] == 'D')
 			{
@@ -1349,8 +1416,11 @@ int main(int argcount, char *argvalues[])
 				currentBlock = feistelRound(currentBlock, keys[2]);
 				currentBlock = feistelRound(currentBlock, keys[1]);
 				currentBlock = feistelRound(currentBlock, keys[0]);
+				currentBlock = finalPermutation(currentBlock);
+				if(numLeft == 8)currentBlock = currentBlock >> 32;
+
 			}
-			currentBlock = finalPermutation(currentBlock);
+			
 			fwrite(&currentBlock, 1, 8, outFilePnt);
 			i += 8;
 		}
