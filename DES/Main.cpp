@@ -4,6 +4,7 @@
 #include <fstream>
 #include <sstream>
 #include <string>
+#include <time.h>
 
 using namespace std;
 
@@ -1271,13 +1272,13 @@ ull getPadding()
 
 int main(int argcount, char *argvalues[])
 {
-	
+	clock_t before = clock();
 	FILE * inFilePnt, * outFilePnt;
 	long lSize;
 	size_t result;
-	ull currentBlock, key, sizeBlock;
+	ull currentBlock, key, sizeBlock, size;
 	ull keys[16];
-
+	ull count = 0;
 	getKeys(argvalues[2], keys);
 
 	fopen_s(&inFilePnt, argvalues[4], "rb");
@@ -1291,64 +1292,47 @@ int main(int argcount, char *argvalues[])
 	rewind(inFilePnt);
 	
 	sizeBlock = 0;
+	size = lSize;
+	
+	//Encrypt
 	if (argvalues[1][1] == 'E') 
 	{
-		for (int i = 4; i < 8; i++)
+		//Get SizeBlock
 		{
-			sizeBlock = sizeBlock + (getPadding() << (i * 8));
-		}
-		sizeBlock = sizeBlock + lSize;
-		fwrite(&sizeBlock, 1, 8, outFilePnt);
-	}
-	if (argvalues[1][1] == 'D')
-	{
-		result = fread(&sizeBlock, 1, 8, inFilePnt);
-		sizeBlock = initialPermutation(sizeBlock);
-		sizeBlock = feistelRound(sizeBlock, keys[15]);
-		sizeBlock = feistelRound(sizeBlock, keys[14]);
-		sizeBlock = feistelRound(sizeBlock, keys[13]);
-		sizeBlock = feistelRound(sizeBlock, keys[12]);
-		sizeBlock = feistelRound(sizeBlock, keys[11]);
-		sizeBlock = feistelRound(sizeBlock, keys[10]);
-		sizeBlock = feistelRound(sizeBlock, keys[9]);
-		sizeBlock = feistelRound(sizeBlock, keys[8]);
-		sizeBlock = feistelRound(sizeBlock, keys[7]);
-		sizeBlock = feistelRound(sizeBlock, keys[6]);
-		sizeBlock = feistelRound(sizeBlock, keys[5]);
-		sizeBlock = feistelRound(sizeBlock, keys[4]);
-		sizeBlock = feistelRound(sizeBlock, keys[3]);
-		sizeBlock = feistelRound(sizeBlock, keys[2]);
-		sizeBlock = feistelRound(sizeBlock, keys[1]);
-		sizeBlock = feistelRound(sizeBlock, keys[0]);
-		sizeBlock = finalPermutation(sizeBlock);
-		sizeBlock = sizeBlock & 255;
-	}
-
-
-	int i = 0;
-	while (i < lSize)
-	{
-		int numLeft = lSize - i;
-		if (numLeft > 0 && numLeft < 8) 
-		{	
-			if (argvalues[1][1] == 'E')
+			ull r = 0;
+			for (int i = 4; i < 8; i++)
 			{
-				char * buffer = (char*)malloc(8);
-				int padNum = 8 - numLeft;
-				currentBlock = 0;
-				result = fread(&currentBlock, 1, numLeft, inFilePnt);
-				currentBlock = currentBlock << (padNum * 8);
+				r = r + (getPadding() << (i * 8));
+			}
+			sizeBlock = sizeBlock + lSize + r;
+			sizeBlock = initialPermutation(sizeBlock);
+			sizeBlock = feistelRound(sizeBlock, keys[0]);
+			sizeBlock = feistelRound(sizeBlock, keys[1]);
+			sizeBlock = feistelRound(sizeBlock, keys[2]);
+			sizeBlock = feistelRound(sizeBlock, keys[3]);
+			sizeBlock = feistelRound(sizeBlock, keys[4]);
+			sizeBlock = feistelRound(sizeBlock, keys[5]);
+			sizeBlock = feistelRound(sizeBlock, keys[6]);
+			sizeBlock = feistelRound(sizeBlock, keys[7]);
+			sizeBlock = feistelRound(sizeBlock, keys[8]);
+			sizeBlock = feistelRound(sizeBlock, keys[9]);
+			sizeBlock = feistelRound(sizeBlock, keys[10]);
+			sizeBlock = feistelRound(sizeBlock, keys[11]);
+			sizeBlock = feistelRound(sizeBlock, keys[12]);
+			sizeBlock = feistelRound(sizeBlock, keys[13]);
+			sizeBlock = feistelRound(sizeBlock, keys[14]);
+			sizeBlock = feistelRound(sizeBlock, keys[15]);
+			sizeBlock = finalPermutation(sizeBlock);
+			fwrite(&sizeBlock, 1, 8, outFilePnt);
+		}
 
-				while (padNum > 0)
-				{
-					ull pad = getPadding();
-					pad = pad << ((padNum - 1) * 8);
-					currentBlock = currentBlock + pad;
-					padNum--;
-				}
+		//Encrypt + Write all but last block
+		{
+			for (int i = 0; i < size - 8; i += 8)
+			{
+				result = fread(&currentBlock, 1, 8, inFilePnt);
 
 				currentBlock = initialPermutation(currentBlock);
-
 				currentBlock = feistelRound(currentBlock, keys[0]);
 				currentBlock = feistelRound(currentBlock, keys[1]);
 				currentBlock = feistelRound(currentBlock, keys[2]);
@@ -1365,69 +1349,140 @@ int main(int argcount, char *argvalues[])
 				currentBlock = feistelRound(currentBlock, keys[13]);
 				currentBlock = feistelRound(currentBlock, keys[14]);
 				currentBlock = feistelRound(currentBlock, keys[15]);
+				currentBlock = finalPermutation(currentBlock);
+				fwrite(&currentBlock, 1, 8, outFilePnt);
 			}
-
-			currentBlock = finalPermutation(currentBlock);
-			fwrite(&currentBlock, 1, 8, outFilePnt);
-			i += 8;		
-
-			//call function to add random characters to &currentBlock
 		}
-		else
+
+		//Pad last block, encypt, and write
 		{
-			result = fread(&currentBlock, 1, 8, inFilePnt);
-			//currentBlock = 0x0123456789ABCDEF;
+			int numLeft = size % 8;
+			currentBlock = 0;
+			result = fread(&currentBlock, 1, numLeft, inFilePnt);
+			for (numLeft; numLeft < 8; numLeft++)
+			{
+				ull pad = rand() % 256;
+				currentBlock = currentBlock << 8;
+				currentBlock = currentBlock + pad;				
+			}
 			currentBlock = initialPermutation(currentBlock);
-			if (argvalues[1][1] == 'E')
-			{
-				currentBlock = feistelRound(currentBlock, keys[0]);
-				currentBlock = feistelRound(currentBlock, keys[1]);
-				currentBlock = feistelRound(currentBlock, keys[2]);
-				currentBlock = feistelRound(currentBlock, keys[3]);
-				currentBlock = feistelRound(currentBlock, keys[4]);
-				currentBlock = feistelRound(currentBlock, keys[5]);
-				currentBlock = feistelRound(currentBlock, keys[6]);
-				currentBlock = feistelRound(currentBlock, keys[7]);
-				currentBlock = feistelRound(currentBlock, keys[8]);
-				currentBlock = feistelRound(currentBlock, keys[9]);
-				currentBlock = feistelRound(currentBlock, keys[10]);
-				currentBlock = feistelRound(currentBlock, keys[11]);
-				currentBlock = feistelRound(currentBlock, keys[12]);
-				currentBlock = feistelRound(currentBlock, keys[13]);
-				currentBlock = feistelRound(currentBlock, keys[14]);
-				currentBlock = feistelRound(currentBlock, keys[15]);
-				currentBlock = finalPermutation(currentBlock);
-			}
-			if (argvalues[1][1] == 'D')
-			{
-				currentBlock = feistelRound(currentBlock, keys[15]);
-				currentBlock = feistelRound(currentBlock, keys[14]);
-				currentBlock = feistelRound(currentBlock, keys[13]);
-				currentBlock = feistelRound(currentBlock, keys[12]);
-				currentBlock = feistelRound(currentBlock, keys[11]);
-				currentBlock = feistelRound(currentBlock, keys[10]);
-				currentBlock = feistelRound(currentBlock, keys[9]);
-				currentBlock = feistelRound(currentBlock, keys[8]);
-				currentBlock = feistelRound(currentBlock, keys[7]);
-				currentBlock = feistelRound(currentBlock, keys[6]);
-				currentBlock = feistelRound(currentBlock, keys[5]);
-				currentBlock = feistelRound(currentBlock, keys[4]);
-				currentBlock = feistelRound(currentBlock, keys[3]);
-				currentBlock = feistelRound(currentBlock, keys[2]);
-				currentBlock = feistelRound(currentBlock, keys[1]);
-				currentBlock = feistelRound(currentBlock, keys[0]);
-				currentBlock = finalPermutation(currentBlock);
-				if(numLeft == 8)currentBlock = currentBlock >> 32;
-
-			}
-			
-			fwrite(&currentBlock, 1, 8, outFilePnt);
-			i += 8;
+			currentBlock = feistelRound(currentBlock, keys[0]);
+			currentBlock = feistelRound(currentBlock, keys[1]);
+			currentBlock = feistelRound(currentBlock, keys[2]);
+			currentBlock = feistelRound(currentBlock, keys[3]);
+			currentBlock = feistelRound(currentBlock, keys[4]);
+			currentBlock = feistelRound(currentBlock, keys[5]);
+			currentBlock = feistelRound(currentBlock, keys[6]);
+			currentBlock = feistelRound(currentBlock, keys[7]);
+			currentBlock = feistelRound(currentBlock, keys[8]);
+			currentBlock = feistelRound(currentBlock, keys[9]);
+			currentBlock = feistelRound(currentBlock, keys[10]);
+			currentBlock = feistelRound(currentBlock, keys[11]);
+			currentBlock = feistelRound(currentBlock, keys[12]);
+			currentBlock = feistelRound(currentBlock, keys[13]);
+			currentBlock = feistelRound(currentBlock, keys[14]);
+			currentBlock = feistelRound(currentBlock, keys[15]);
+			currentBlock = finalPermutation(currentBlock);
+			fwrite(&currentBlock, 1, 8, outFilePnt);			
 		}
+
+
 	}
+
+	//Decrypt
+	if (argvalues[1][1] == 'D')
+	{
+		//Get Sizeblock
+		{
+			result = fread(&sizeBlock, 1, 8, inFilePnt);
+			sizeBlock = initialPermutation(sizeBlock);
+			sizeBlock = feistelRound(sizeBlock, keys[15]);
+			sizeBlock = feistelRound(sizeBlock, keys[14]);
+			sizeBlock = feistelRound(sizeBlock, keys[13]);
+			sizeBlock = feistelRound(sizeBlock, keys[12]);
+			sizeBlock = feistelRound(sizeBlock, keys[11]);
+			sizeBlock = feistelRound(sizeBlock, keys[10]);
+			sizeBlock = feistelRound(sizeBlock, keys[9]);
+			sizeBlock = feistelRound(sizeBlock, keys[8]);
+			sizeBlock = feistelRound(sizeBlock, keys[7]);
+			sizeBlock = feistelRound(sizeBlock, keys[6]);
+			sizeBlock = feistelRound(sizeBlock, keys[5]);
+			sizeBlock = feistelRound(sizeBlock, keys[4]);
+			sizeBlock = feistelRound(sizeBlock, keys[3]);
+			sizeBlock = feistelRound(sizeBlock, keys[2]);
+			sizeBlock = feistelRound(sizeBlock, keys[1]);
+			sizeBlock = feistelRound(sizeBlock, keys[0]);
+			sizeBlock = finalPermutation(sizeBlock);
+			sizeBlock = sizeBlock & 4294967295;
+		}
+
+		//Decrypt all but last block
+		{
+			for (int i = 0; i < sizeBlock - 8; i += 8)
+			{
+				result = fread(&currentBlock, 1, 8, inFilePnt);
+
+				currentBlock = initialPermutation(currentBlock);
+				currentBlock = feistelRound(currentBlock, keys[15]);
+				currentBlock = feistelRound(currentBlock, keys[14]);
+				currentBlock = feistelRound(currentBlock, keys[13]);
+				currentBlock = feistelRound(currentBlock, keys[12]);
+				currentBlock = feistelRound(currentBlock, keys[11]);
+				currentBlock = feistelRound(currentBlock, keys[10]);
+				currentBlock = feistelRound(currentBlock, keys[9]);
+				currentBlock = feistelRound(currentBlock, keys[8]);
+				currentBlock = feistelRound(currentBlock, keys[7]);
+				currentBlock = feistelRound(currentBlock, keys[6]);
+				currentBlock = feistelRound(currentBlock, keys[5]);
+				currentBlock = feistelRound(currentBlock, keys[4]);
+				currentBlock = feistelRound(currentBlock, keys[3]);
+				currentBlock = feistelRound(currentBlock, keys[2]);
+				currentBlock = feistelRound(currentBlock, keys[1]);
+				currentBlock = feistelRound(currentBlock, keys[0]);
+				currentBlock = finalPermutation(currentBlock);
+
+				fwrite(&currentBlock, 1, 8, outFilePnt);
+			}
+		}
+
+		//Decrpyt final block and ignore padding bits
+		{
+			int numLeft = sizeBlock % 8;
+			currentBlock = 0;
+			result = fread(&currentBlock, 1, 8, inFilePnt);
+			currentBlock = initialPermutation(currentBlock);
+			currentBlock = feistelRound(currentBlock, keys[15]);
+			currentBlock = feistelRound(currentBlock, keys[14]);
+			currentBlock = feistelRound(currentBlock, keys[13]);
+			currentBlock = feistelRound(currentBlock, keys[12]);
+			currentBlock = feistelRound(currentBlock, keys[11]);
+			currentBlock = feistelRound(currentBlock, keys[10]);
+			currentBlock = feistelRound(currentBlock, keys[9]);
+			currentBlock = feistelRound(currentBlock, keys[8]);
+			currentBlock = feistelRound(currentBlock, keys[7]);
+			currentBlock = feistelRound(currentBlock, keys[6]);
+			currentBlock = feistelRound(currentBlock, keys[5]);
+			currentBlock = feistelRound(currentBlock, keys[4]);
+			currentBlock = feistelRound(currentBlock, keys[3]);
+			currentBlock = feistelRound(currentBlock, keys[2]);
+			currentBlock = feistelRound(currentBlock, keys[1]);
+			currentBlock = feistelRound(currentBlock, keys[0]);
+			currentBlock = finalPermutation(currentBlock);
+			if (numLeft < 8)
+			{
+				currentBlock = currentBlock >> ((8 - numLeft) * 8);
+				fwrite(&currentBlock, 1, numLeft, outFilePnt);
+			}
+			else fwrite(&currentBlock, 1, numLeft, outFilePnt);
+		}
+
+	}
+
+
 
 	fclose(inFilePnt);
 	fclose(outFilePnt);
-
+	double time = (clock() - before)/CLOCKS_PER_SEC;
+	cout << time << " seconds to run" << endl;
 
 }
