@@ -1357,6 +1357,7 @@ int main(int argcount, char *argvalues[])
 		//Pad last block, encypt, and write
 		{
 			int numLeft = size % 8;
+			if (numLeft == 0) numLeft = 8;
 			currentBlock = 0;
 			result = fread(&currentBlock, 1, numLeft, inFilePnt);
 			for (numLeft; numLeft < 8; numLeft++)
@@ -1468,12 +1469,12 @@ int main(int argcount, char *argvalues[])
 			currentBlock = feistelRound(currentBlock, keys[1]);
 			currentBlock = feistelRound(currentBlock, keys[0]);
 			currentBlock = finalPermutation(currentBlock);
-			if (numLeft < 8)
+			if (numLeft < 8 && numLeft > 0)
 			{
 				currentBlock = currentBlock >> ((8 - numLeft) * 8);
 				fwrite(&currentBlock, 1, numLeft, outFilePnt);
 			}
-			else fwrite(&currentBlock, 1, numLeft, outFilePnt);
+			else fwrite(&currentBlock, 1, 8, outFilePnt);
 		}
 
 	}
