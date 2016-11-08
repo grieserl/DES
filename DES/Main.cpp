@@ -1,3 +1,9 @@
+/* 
+ * Written By: Logan Grieser
+ * DES Programming Assignment
+ * October, 2016
+ * * */
+
 #include <iostream>
 #include <cstdlib>
 #include <cstdint>
@@ -1268,23 +1274,61 @@ ull getPadding()
 		return ascii;
 }
 
+//swaps big and little endien of x, not sure if necessary on all machines but is on mine. to disable, comment all lines, and uncomment last line
+ull swapEndian(ull x)
+{
+	ull y = 0, temp = 0;
+	temp =( x & 0xFF) << 56;
+	y = y^temp;
+	temp = ((x >> 8) & 0xFF) << 48;
+	y = y^temp;
+	temp = ((x >> 16) & 0xFF) << 40;
+	y = y^temp;
+	temp = ((x >> 24) & 0xFF) << 32;
+	y = y^temp;
+	temp = ((x >> 32) & 0xFF) << 24;
+	y = y^temp;
+	temp = ((x >> 40) & 0xFF) << 16;
+	y = y^temp;
+	temp = ((x >> 48) & 0xFF) << 8;
+	y = y^temp;
+	temp = x >> 56;
+	y = y^temp;
+
+	return y;
+	//return x; //uncomment to disable swapping endian
+}
 
 
-int main(int argcount, char *argvalues[])
+
+ int main(int argcount, char *argvalues[])
 {
 	clock_t before = clock();
 	FILE * inFilePnt, * outFilePnt;
 	long lSize;
 	size_t result;
-	ull currentBlock, key, sizeBlock, size;
+	uint64_t currentBlock, key, sizeBlock, size;
 	ull keys[16];
 	ull count = 0;
+
+
+
+	
+
 	getKeys(argvalues[2], keys);
 
 	fopen_s(&inFilePnt, argvalues[4], "rb");
 	fopen_s(&outFilePnt, argvalues[5], "wb");
-	if (inFilePnt == NULL) { fputs("File error", stderr); exit(1); }
-	if (outFilePnt == NULL) { fputs("File error", stderr); exit(1); }
+
+	if (inFilePnt == NULL) { 
+		cout <<  "File Not Found: " << argvalues[4] <<  endl;
+		return 0;
+	}
+
+	if (outFilePnt == NULL) { 
+		cout << "File Not Found: " << argvalues[5] << endl;
+		return 0;
+	}
 
 	//obtain file size:
 	fseek(inFilePnt, 0, SEEK_END);
@@ -1295,7 +1339,7 @@ int main(int argcount, char *argvalues[])
 	size = lSize;
 	
 	//Encrypt
-	if (argvalues[1][1] == 'E') 
+	if (toupper(argvalues[1][1]) == 'E') 
 	{
 		//Get SizeBlock
 		{
@@ -1323,6 +1367,7 @@ int main(int argcount, char *argvalues[])
 			sizeBlock = feistelRound(sizeBlock, keys[14]);
 			sizeBlock = feistelRound(sizeBlock, keys[15]);
 			sizeBlock = finalPermutation(sizeBlock);
+			sizeBlock = swapEndian(sizeBlock);
 			fwrite(&sizeBlock, 1, 8, outFilePnt);
 		}
 
@@ -1331,6 +1376,7 @@ int main(int argcount, char *argvalues[])
 			for (int i = 0; i < size - 8; i += 8)
 			{
 				result = fread(&currentBlock, 1, 8, inFilePnt);
+				currentBlock = swapEndian(currentBlock);
 
 				currentBlock = initialPermutation(currentBlock);
 				currentBlock = feistelRound(currentBlock, keys[0]);
@@ -1350,6 +1396,7 @@ int main(int argcount, char *argvalues[])
 				currentBlock = feistelRound(currentBlock, keys[14]);
 				currentBlock = feistelRound(currentBlock, keys[15]);
 				currentBlock = finalPermutation(currentBlock);
+				currentBlock = swapEndian(currentBlock);
 				fwrite(&currentBlock, 1, 8, outFilePnt);
 			}
 		}
@@ -1360,12 +1407,14 @@ int main(int argcount, char *argvalues[])
 			if (numLeft == 0) numLeft = 8;
 			currentBlock = 0;
 			result = fread(&currentBlock, 1, numLeft, inFilePnt);
+			currentBlock = swapEndian(currentBlock);
 			for (numLeft; numLeft < 8; numLeft++)
 			{
 				ull pad = rand() % 256;
-				currentBlock = currentBlock << 8;
+				pad = pad << (8 *(7-numLeft));
 				currentBlock = currentBlock + pad;				
 			}
+			
 			currentBlock = initialPermutation(currentBlock);
 			currentBlock = feistelRound(currentBlock, keys[0]);
 			currentBlock = feistelRound(currentBlock, keys[1]);
@@ -1384,18 +1433,21 @@ int main(int argcount, char *argvalues[])
 			currentBlock = feistelRound(currentBlock, keys[14]);
 			currentBlock = feistelRound(currentBlock, keys[15]);
 			currentBlock = finalPermutation(currentBlock);
-			fwrite(&currentBlock, 1, 8, outFilePnt);			
+			currentBlock = swapEndian(currentBlock);
+			fwrite(&currentBlock, 1, 8, outFilePnt);		
+			
 		}
 
 
 	}
 
 	//Decrypt
-	if (argvalues[1][1] == 'D')
+	else if (toupper(argvalues[1][1]) == 'D')
 	{
 		//Get Sizeblock
 		{
 			result = fread(&sizeBlock, 1, 8, inFilePnt);
+			sizeBlock = swapEndian(sizeBlock);
 			sizeBlock = initialPermutation(sizeBlock);
 			sizeBlock = feistelRound(sizeBlock, keys[15]);
 			sizeBlock = feistelRound(sizeBlock, keys[14]);
@@ -1422,7 +1474,7 @@ int main(int argcount, char *argvalues[])
 			for (int i = 0; i < sizeBlock - 8; i += 8)
 			{
 				result = fread(&currentBlock, 1, 8, inFilePnt);
-
+				currentBlock = swapEndian(currentBlock);
 				currentBlock = initialPermutation(currentBlock);
 				currentBlock = feistelRound(currentBlock, keys[15]);
 				currentBlock = feistelRound(currentBlock, keys[14]);
@@ -1441,7 +1493,7 @@ int main(int argcount, char *argvalues[])
 				currentBlock = feistelRound(currentBlock, keys[1]);
 				currentBlock = feistelRound(currentBlock, keys[0]);
 				currentBlock = finalPermutation(currentBlock);
-
+				currentBlock = swapEndian(currentBlock);
 				fwrite(&currentBlock, 1, 8, outFilePnt);
 			}
 		}
@@ -1451,6 +1503,7 @@ int main(int argcount, char *argvalues[])
 			int numLeft = sizeBlock % 8;
 			currentBlock = 0;
 			result = fread(&currentBlock, 1, 8, inFilePnt);
+			currentBlock = swapEndian(currentBlock);
 			currentBlock = initialPermutation(currentBlock);
 			currentBlock = feistelRound(currentBlock, keys[15]);
 			currentBlock = feistelRound(currentBlock, keys[14]);
@@ -1469,21 +1522,35 @@ int main(int argcount, char *argvalues[])
 			currentBlock = feistelRound(currentBlock, keys[1]);
 			currentBlock = feistelRound(currentBlock, keys[0]);
 			currentBlock = finalPermutation(currentBlock);
+			
 			if (numLeft < 8 && numLeft > 0)
 			{
 				currentBlock = currentBlock >> ((8 - numLeft) * 8);
+				currentBlock = swapEndian(currentBlock);
+				currentBlock = currentBlock >> ((8 - numLeft) * 8);
 				fwrite(&currentBlock, 1, numLeft, outFilePnt);
 			}
-			else fwrite(&currentBlock, 1, 8, outFilePnt);
+			
+			else {
+				currentBlock = swapEndian(currentBlock);
+				fwrite(&currentBlock, 1, 8, outFilePnt);
+			}
 		}
-
 	}
 
-
+	else
+	{
+		cout << argvalues[1] << " is not a valid input" << endl;
+		return 0;
+	}
 
 	fclose(inFilePnt);
 	fclose(outFilePnt);
+
+	//outputs run time
 	double time = (clock() - before)/CLOCKS_PER_SEC;
 	cout << time << " seconds to run" << endl;
+
+	return 0;
 
 }
